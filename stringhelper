@@ -1,0 +1,74 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Web;
+
+namespace H3C.WeChat.Common
+{
+    public static class StringUtils
+    {
+
+        public static string Left(this string str, int length)
+        {
+            return str.Substring(0, Math.Min(length, str.Length));
+        }
+
+        public static string RndChart(int vcodeNum)
+        {
+            string vchar = "a,b,c,d,e,f,g,h,i,j,k,m,n,p,r,s,t,u,v,w,x,y,z";
+            string[] vcArray = vchar.Split(new Char[] { ',' });
+            string vNum = "";
+            Random rand = new Random();
+            for (int i = 1; i < vcodeNum + 1; i++)
+            {
+
+                int t = rand.Next(vcArray.Count() - 1);
+
+                vNum += vcArray[t];
+            }
+            return vNum;
+        }
+        public static String RndNum(int vcodeNum)
+        {
+            Random aa = new Random();
+            StringBuilder bsb = new StringBuilder("1");
+            StringBuilder esb = new StringBuilder("9");
+            for (int i = 1; i < vcodeNum; i++)
+            {
+                bsb.Append("0");
+                esb.Append("9");
+            }
+            return aa.Next(int.Parse(bsb.ToString()), int.Parse(esb.ToString())).ToString();
+        }
+
+        public static String TelNumFilter(string nums, bool isMobile)
+        {
+            nums = Regex.Replace(nums, "[^0-9]+", ",");
+            StringBuilder rsSb = new StringBuilder(",");
+            string[] numAry = nums.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < numAry.Length; i++)
+            {
+                if (numAry[i].Length < 5)
+                    continue;
+
+                if (isMobile)
+                {
+                    while (numAry[i].StartsWith("0"))
+                        numAry[i] = numAry[i].Substring(1);
+                    if (numAry[i].Length == 11 && int.Parse(numAry[i].Substring(0, 2)) > 10 && int.Parse(numAry[i].Substring(0, 2)) < 20 && rsSb.ToString().IndexOf("," + numAry[i] + ",") < 0)
+                        rsSb.Append(numAry[i]).Append(",");
+                }
+                else if (rsSb.ToString().IndexOf("," + numAry[i] + ",") < 0)
+                    rsSb.Append(numAry[i]).Append(",");
+            }
+            return rsSb.ToString().Trim(',');
+        }
+        public static String[] MobileNumFilter(string nums)
+        {
+            String mobiles = TelNumFilter(nums, true);
+            return mobiles.Split(',');
+        }
+    }
+}
