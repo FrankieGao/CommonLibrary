@@ -1,0 +1,210 @@
+using System.Xml;
+using H3C.WeChat.API.Models;
+using H3C.WeChat.Model;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Text;
+using System.Web;
+using System.Xml.Linq;
+using System.Xml.Serialization;
+
+namespace H3C.WeChat.API.Common
+{
+    public class MessageSeralizer
+    {
+
+        public static T Deserialize<T>(string xml)
+            where T : new()
+        {
+            var document = XDocument.Parse(xml);
+            return Deserialize<T>(document);
+        }
+        public static object XMLToObject(string s, Type t)
+        {
+            XmlSerializer mySerializer = new XmlSerializer(t);
+            StreamReader mem2 = new StreamReader(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(s)), System.Text.Encoding.UTF8);
+            return mySerializer.Deserialize(mem2);
+        }
+         public static T XMLToObject<T>(string source, Encoding encoding)
+        {
+            XmlSerializer mySerializer = new XmlSerializer(typeof(T));
+            using (MemoryStream stream = new MemoryStream(encoding.GetBytes(source)))
+            {
+                return (T)mySerializer.Deserialize(stream);
+            }
+        }
+         public static T JSONXMLToObject<T>(string strJson)
+         {
+             XmlDocument xdoc = new XmlDocument();
+             try
+             {
+                 xdoc.LoadXml(strJson);
+                 XmlNodeReader reader = new XmlNodeReader(xdoc.DocumentElement);
+                 XmlSerializer ser = new XmlSerializer(typeof(T));
+                 object obj = ser.Deserialize(reader);
+                 return (T)obj;
+             }
+             catch
+             {
+                 return default(T);
+             }
+         }
+        public static T Deserialize<T>(XDocument document)
+            where T : new()
+        {
+            T entity = new T();
+            PropertyInfo[] properties = typeof(T).GetProperties();
+            object obj = new object();
+            foreach (var property in properties)
+            {
+                var node = document.Root.Element(property.Name);
+                if (node != null)
+                {
+                    if (node.HasElements)
+                    {
+                        obj = property.GetValue(entity, null);
+                        foreach (var item in obj.GetType().GetProperties())
+                        {
+
+                         
+                                item.SetValue(obj, node.Element(item.Name).Value);
+                       
+                        }
+                    }
+                    else
+                    {
+                        var value = ParseProperty(property.PropertyType, node.Value);
+                        property.SetValue(entity, value);
+                    }
+                }
+            }
+            return entity;
+        }
+
+        public static string Serialize<T>(T message)
+            where T : new()
+        {
+            if (message is TextResponseMessage)
+            {
+                return SerializeTextResponse(message as TextResponseMessage);
+            }
+            else if (message is MusicResponseMessage)
+            {
+                return SerializeMusicResponse(message as MusicResponseMessage);
+            }
+            else if (message is NewsResponseMessage)
+            {
+                return SerializeNewsResponse(message as NewsResponseMessage);
+            }
+            else if (message is VoiceResponseMessage)
+            {
+                return SerializeVoiceResponse(message as VoiceResponseMessage);
+            }
+            
+            throw new ArgumentException("Unsupported message type: " + typeof(T).Name);
+        }
+
+        private static string SerializeVoiceResponse(VoiceResponseMessage response)
+        {
+            return string.Format(@"<xml>
+<ToUserName><![CDATA[{0}]]></ToUserName>
+<FromUserName><![CDATA[{1}]]></FromUserName> 
+<CreateTime>{2}</CreateTime>
+<MsgType><![CDATA[{3}]]></MsgType>
+<Voice>
+<MediaId><![CDATA[{4}]]></MediaId>
+</Voice>
+<FuncFlag>{5}</FuncFlag>
+</xml>", response.ToUserName, response.FromUserName, response.CreateTime.Ticks,
+       response.MsgType, response.MediaId, response.FuncFlag ? 1 : 0);
+        }
+
+
+        private static string SerializeTextResponse(TextResponseMessage response)
+        {
+            return string.Format(@"<xml>
+<ToUserName><![CDATA[{0}]]></ToUserName>
+<FromUserName><![CDATA[{1}]]></FromUserName> 
+<CreateTime>{2}</CreateTime>
+<MsgType><![CDATA[{3}]]></MsgType>
+<Content><![CDATA[{5}]]></Content>
+<FuncFlag>{4}</FuncFlag>
+</xml>", response.ToUserName, response.FromUserName, response.CreateTime.Ticks,
+        response.MsgType, response.FuncFlag ? 1 : 0, response.Content);
+        }
+
+
+        private static string SerializeMusicResponse(MusicResponseMessage response)
+        {
+            return string.Format(@"<xml>
+<ToUserName><![CDATA[{0}]]></ToUserName>
+<FromUserName><![CDATA[{1}]]></FromUserName> 
+<CreateTime>{2}</CreateTime>
+<MsgType><![CDATA[{3}]]></MsgType>
+<Music>
+<Title><![CDATA[{5}]]></Title>
+<Description><![CDATA[{6}]]></Description>
+<MusicUrl><![CDATA[{7}]]></MusicUrl>
+<HQMusicUrl><![CDATA[{8}]]></HQMusicUrl>
+</Music>
+<FuncFlag>{4}</FuncFlag>
+</xml>", response.ToUserName, response.FromUserName, response.CreateTime.Ticks,
+        response.MsgType, response.FuncFlag ? 1 : 0,
+        response.Title, response.Description, response.MusicUrl, response.HQMusicUrl);
+        }
+
+        private static string SerializeNewsResponse(NewsResponseMessage response)
+        {
+            string articalTmp = @"<item>
+<Title><![CDATA[{0}]]></Title>
+<Description><![CDATA[{1}]]></Description>
+<PicUrl><![CDATA[{2}]]></PicUrl>
+<Url><![CDATA[{3}]]></Url>
+</item>";
+            StringBuilder sb = new StringBuilder();
+            foreach (var artical in response.Articles)
+            {
+                sb.Append(string.Format(articalTmp, artical.Title,
+                    artical.Description, artical.PicUrl, artical.Url));
+            }
+
+            return string.Format(@"<xml>
+<ToUserName><![CDATA[{0}]]></ToUserName>
+<FromUserName><![CDATA[{1}]]></FromUserName>
+<CreateTime>{2}</CreateTime>
+<MsgType><![CDATA[{3}]]></MsgType>
+<ArticleCount>{6}</ArticleCount>
+<Articles>
+{5}
+</Articles>
+<FuncFlag>{4}</FuncFlag>
+</xml>", response.ToUserName, response.FromUserName, response.CreateTime.Ticks,
+        response.MsgType, response.FuncFlag ? 1 : 0, sb.ToString(), response.Articles.Count());
+        }
+
+        private static object ParseProperty(Type t, string value)
+        {
+            switch (t.Name)
+            {
+                case "DateTime":
+                    return ParseDateTime(value);
+                case "Int32":
+                    return Int32.Parse(value);
+                case "Int64":
+                    return Int64.Parse(value);
+                case "Double":
+                    return Double.Parse(value);
+
+            }
+            return value;
+        }
+
+        private static DateTime ParseDateTime(string value)
+        {
+            return new DateTime(1970, 01, 01).AddTicks(long.Parse(value) * 10000000);//.ToUniversalTime();
+        }
+    }
+}
