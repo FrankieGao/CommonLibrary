@@ -1,0 +1,197 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Web.Script.Serialization;
+
+namespace H3C.WeChat.Common
+{
+    public static class JsonHelper
+    {
+      
+            /// <summary>
+            /// 添加时间转换器
+            /// </summary>
+            /// <param name="serializer"></param>
+            private static void AddIsoDateTimeConverter(JsonSerializer serializer)
+            {
+                IsoDateTimeConverter idtc = new IsoDateTimeConverter();
+                //定义时间转化格式   
+               idtc.DateTimeFormat = "yyyy-MM-dd HH:mm";
+              // idtc.DateTimeFormat = "yyyy-MM-dd";  
+                //JavaScriptDateTimeConverter d = new JavaScriptDateTimeConverter();
+
+                serializer.Converters.Add(idtc);
+            }
+            /// <summary>   
+            /// Json转换配置   
+            /// </summary>   
+            /// <param name="serializer"></param>  
+            private static void SerializerSetting(JsonSerializer serializer)
+            {
+                serializer.ReferenceLoopHandling = ReferenceLoopHandling.Ignore;
+                serializer.ObjectCreationHandling = ObjectCreationHandling.Replace;
+                serializer.MissingMemberHandling = MissingMemberHandling.Ignore;
+                //serializer.NullValueHandling = NullValueHandling.Ignore; 
+                //serializer.DefaultValueHandling = DefaultValueHandling.Ignore; 
+            }
+            /// <summary>
+            /// 把对象列表编码为Json数据   
+            /// </summary>   
+            /// <typeparam name="T"></typeparam>   
+            /// <param name="objList"></param>  
+            /// <returns></returns>
+            public static string JsonSerializerList<T>(List<T> objList)
+            {
+                JsonSerializer serializer = new JsonSerializer();
+                SerializerSetting(serializer);
+                AddIsoDateTimeConverter(serializer);
+                using (TextWriter sw = new StringWriter())
+                using (JsonWriter writer = new JsonTextWriter(sw))
+                {
+                    serializer.Serialize(writer, objList);
+                    return sw.ToString();
+                }
+            }
+            /// <summary> 
+            ///  把一个对象编码为Json数据   
+            ///  </summary> 
+            ///  <typeparam name="T"></typeparam>   
+            ///  <param name="obj"></param>   
+            ///  <returns></returns>   
+            public static string JsonSerializer<T>(T obj)
+            {
+                JsonSerializer serializer = new JsonSerializer();
+                SerializerSetting(serializer);
+                AddIsoDateTimeConverter(serializer);
+                using (TextWriter sw = new StringWriter())
+                using (JsonWriter writer = new JsonTextWriter(sw))
+                {
+                    serializer.Serialize(writer, obj);
+                    return sw.ToString();
+                }
+            }
+            /// <summary>   
+            /// 根据传入的Json数据，解码为对象(一个)   
+            /// </summary>   
+            /// <typeparam name="T"></typeparam>   
+            /// <param name="data"></param>   
+            /// <returns></returns>   
+            public static T JsonDeserialize<T>(string data)
+            {
+                JsonSerializer serializer = new JsonSerializer();
+                serializer.MissingMemberHandling = MissingMemberHandling.Ignore;
+                AddIsoDateTimeConverter(serializer);
+                StringReader sr = new StringReader(data.Replace(":,", ":null,").Replace(":}", ":null}"));
+                return (T)serializer.Deserialize(sr, typeof(T));
+            }
+            public static T JsonDeserialize2<T>(string data)
+            {
+                return (T)JsonConvert.DeserializeObject(data, typeof(T));
+            }
+            /// <summary>  
+            /// 功能同DecodeObject   
+            /// </summary>   
+            /// /// <typeparam name="T"></typeparam>   
+            /// /// <param name="data"></param>   
+            /// /// <returns></returns>        
+            public static List<T> JsonDeserializeList<T>(string data)
+            {
+                JsonSerializer serializer = new JsonSerializer();
+                serializer.MissingMemberHandling = MissingMemberHandling.Ignore;
+                AddIsoDateTimeConverter(serializer);
+                StringReader sr = new StringReader(data.Replace(":,", ":null,").Replace(":}", ":null}"));
+                return (List<T>)serializer.Deserialize(sr, typeof(List<T>));
+            }
+            /// <summary>
+            /// 返回kendoGrid格式的json
+            /// </summary>
+            /// <typeparam name="T">序列化数据类型</typeparam>
+            /// <param name="t">数据对象</param>
+            /// <param name="callback">回调函数名</param>
+            /// <param name="count">记录总数</param>
+            /// <returns></returns>
+            public static string JsonSerializerForkendoGrid<T>(T t, string callback, int count)
+            {
+                string jsonBegin = "({d: { results: ";
+                string jsonEnd = ", __count: " + count + " }})";
+                string objectJson = JsonSerializer<T>(t);
+                string objectResult = objectJson == "null" ? "{}" : objectJson;
+
+                return callback + jsonBegin + objectResult + jsonEnd;
+            }
+
+            /// <summary>
+            /// 过滤特殊字符
+            /// </summary>
+            /// <param name="s">字符串</param>
+            /// <returns>json字符串</returns>
+            public static string String2Json(String s)
+            {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < s.Length; i++)
+                {
+                    char c = s.ToCharArray()[i];
+                    switch (c)
+                    {
+                        case '\"':
+                            sb.Append("\\\""); break;
+                        case '\\':
+                            sb.Append("\\\\"); break;
+                        case '/':
+                            sb.Append("\\/"); break;
+                        case '\b':
+                            sb.Append("\\b"); break;
+                        case '\f':
+                            sb.Append("\\f"); break;
+                        case '\n':
+                            sb.Append("\\n"); break;
+                        case '\r':
+                            sb.Append("\\r"); break;
+                        case '\t':
+                            sb.Append("\\t"); break;
+                        default:
+                            sb.Append(c); break;
+                    }
+                }
+                return sb.ToString();
+            }
+
+        /// <summary>
+        /// 根据指定的key获取json串中的value，找不到则返回空
+        /// </summary>
+        /// <param name="resultStr"></param>
+        /// <param name="key"></param>
+        /// <returns></returns>
+            public static string GetJsonStringValueByKey(string resultStr, string key)
+            {
+                JavaScriptSerializer ser = new JavaScriptSerializer();
+                object content = ser.DeserializeObject(resultStr);
+                var temp = ((System.Collections.Generic.Dictionary<string, object>)content);
+                if (temp.ContainsKey(key))
+                {
+                    return temp[key].ToString();
+                }
+                return string.Empty;
+            }
+
+            public static string GetJsonStringValueByKey(string resultStr, string topLevelKey,string secondLevelKey)
+            {
+                JavaScriptSerializer ser = new JavaScriptSerializer();
+                object content = ser.DeserializeObject(resultStr);
+                var temp = ((System.Collections.Generic.Dictionary<string, object>)content);
+                if (temp.ContainsKey(topLevelKey))
+                {
+                    var temp2 = ((System.Collections.Generic.Dictionary<string, object>)temp[topLevelKey]);
+                    if (temp2.ContainsKey(secondLevelKey))
+                        return temp2[secondLevelKey].ToString();
+                }
+                return string.Empty;
+            }
+        }
+   
+}
