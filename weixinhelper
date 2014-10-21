@@ -1,0 +1,493 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Web;
+using H3C.ProjectFrame.Common;
+using H3C.ProjectFrame.Log;
+using System.Threading;
+using System.Configuration;
+using System.Net;
+using System.IO;
+using System.Web.Script.Serialization;
+using H3C.WeChat.Common;
+using System.Text;
+using H3C.WeChat.Model;
+
+namespace H3C.WeChat.Common
+{
+    public class WeixinUtility
+    {
+        /// <summary>
+        /// 网页上获取用户openID
+        /// </summary>
+        /// <param name="code">用户同意授权，获取的code，详细见:网页授权获取用户基本信息</param>
+        /// <param name="appid"></param>
+        /// <param name="appSecret"></param>
+        /// <returns></returns>
+        public static string GetOpenIDbyCode(string code, string appid, string appSecret)
+        {
+            string getOpenidURL = string.Format("https://api.weixin.qq.com/sns/oauth2/access_token?appid={0}&secret={1}&code={2}&grant_type=authorization_code", appid, appSecret, code);
+            Dictionary<string, string> objectResult = GetDataFromWeixin(getOpenidURL);
+            if (objectResult == null || !objectResult.ContainsKey("openid"))
+            {
+                return string.Empty;
+            }
+            return objectResult["openid"];
+        }
+
+        public static string GetUserIdByCode(string code, string appid, string appsecert, string agentid)
+        {
+            string accesstoken = QiyeWechatUtilty.GetAccessToken(appid, appsecert);
+            Log4h3c.WriteLog("codetest","huoqutoken",Consts.LogType.Error, "token",accesstoken);
+            Log4h3c.WriteLog("codetest", "huoqutoken", Consts.LogType.Error, "appid", appid);
+            Log4h3c.WriteLog("codetest", "huoqutoken", Consts.LogType.Error, "appsecret", appsecert);
+            Log4h3c.WriteLog("codetest", "huoqutoken", Consts.LogType.Error, "code", code);
+
+            string url =
+                string.Format(
+                    "https://qyapi.weixin.qq.com/cgi-bin/user/getuserinfo?access_token={0}&code={1}&agentid={2}",
+                    accesstoken, code, agentid);
+            Dictionary<string, string> objectResult = GetDataFromWeixin(url);
+            if (objectResult == null || !objectResult.ContainsKey("userid"))
+            {
+                return string.Empty;
+            }
+            Log4h3c.WriteLog("codetest", "huoqutoken", Consts.LogType.Error, "code", url);
+            return objectResult["userid"];
+        }
+
+        /// <summary>
+        /// 网页授权获取用户基本信息 snsapi_base
+        /// </summary>
+        /// <param name="code"></param>
+        /// <param name="appid"></param>
+        /// <param name="appSecret"></param>
+        /// <returns></returns>
+        public static Dictionary<string, string> GetSnsBase(string code, string appid, string appSecret)
+        {
+            string url = string.Format("https://api.weixin.qq.com/sns/oauth2/access_token?appid={0}&secret={1}&code={2}&grant_type=authorization_code", appid, appSecret, code);
+            return GetDataFromWeixin(url);
+        }
+
+        /// <summary>
+        /// 网页授权获取用户基本信息 snsapi_userinfo
+        /// </summary>
+        /// <param name="accessToken"></param>
+        /// <param name="openid"></param>
+        /// <returns></returns>
+        public static SNSUserinfo GetSnsUserInfo(string accessToken, string openid)
+        {
+            string url = string.Format("https://api.weixin.qq.com/sns/userinfo?access_token={0}&openid={1}&lang=zh_CN", accessToken, openid);
+            object result = GetObjectFromWeixin(url, typeof(SNSUserinfo));
+            if (result != null)
+                return (SNSUserinfo)result;
+            return null;
+        }
+
+        /// <summary>
+        /// 从微信获取信息
+        /// </summary>
+        /// <param name="url">获取Url</param>
+        /// <returns></returns>
+        private static Dictionary<string, string> GetDataFromWeixin(string url)
+        {
+            string result = GetJsonDataFromWeixin(url);
+            JavaScriptSerializer ser = new JavaScriptSerializer();
+            //Dictionary<string, string> objectResult = ser.Deserialize<Dictionary<string, string>>(result);
+            Dictionary<string, string> objectResult = ser.Deserialize<Dictionary<string, string>>(result);
+            return objectResult;
+        }
+
+        public  static string GetJsonDataFromWeixin(string url)
+        {
+            try
+            {
+                WebClient client = new WebClient();
+                client.Proxy = HttpHelper.GetProxy();
+                Uri newUri = new Uri(url);
+                client.Encoding = Encoding.UTF8;
+                return client.DownloadString(newUri);
+            }
+            catch (Exception ex)
+
+            {
+                Log4h3c.WriteLog(AppCode.ExperienceCenter.ToString(), "GetJsonDataFromWeixin",
+                            Consts.LogType.Error, string.Format("ErrorMessage:{0},Url:{1}",ex.Message,url), ex.StackTrace, string.Empty, "");
+                return string.Empty;
+
+            }
+            
+        }
+
+        private static object GetObjectFromWeixin(string url, Type targetType)
+        {
+            string result = GetJsonDataFromWeixin(url);
+            JavaScriptSerializer ser = new JavaScriptSerializer();
+            object objectResult = ser.Deserialize(result, targetType);
+            return objectResult;
+        }
+
+
+
+        
+        public static Dictionary<string, string> GetUserBaseInfo(string assessToken, string openId)
+        {
+            string getUserBaseInfo = string.Format("https://api.weixin.qq.com/cgi-bin/user/info?access_token={0}&openid={1}&lang=zh_CN", assessToken, openId);
+            return GetDataFromWeixin(getUserBaseInfo);
+        }
+
+
+        public static string GetAccessTokenCached(string appID, string appSecret)
+        {
+            try
+            {
+                return WebCache.WithCache(() => GetAccessToken(appID, appSecret), WebCacheKeys.K_EmployeeInformation + appID, WebCacheDependencyKeys.DK_AccessToken);
+
+            }
+            catch (Exception ex)
+            {
+                Log4h3c.WriteLog(AppCode.h3cassistant.ToString(), "GetAccessTokenCached",
+                            Consts.LogType.Error, string.Format("ErrorMessage:{0}", ex.Message), ex.StackTrace, string.Empty, "");
+              
+                return string.Empty;
+            }
+        }
+
+        public static string GetAccessToken(string appID, string appSecret)
+        {
+            try
+            {
+                string token;
+                string tokenURL = "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=" + appID + "&secret=" + appSecret;
+
+                Dictionary<string, string> objectResult = GetDataFromWeixin(tokenURL);
+                if (objectResult == null || objectResult["access_token"] == null) return string.Empty;
+
+                //Set cache (token is valid in 2 hours)
+                token = objectResult["access_token"];
+
+                return token;
+            }
+            catch (Exception ex)
+            {
+                Log4h3c.WriteLog(AppCode.h3cassistant.ToString(), "GetAccessToken",
+                            Consts.LogType.Error, string.Format("ErrorMessage:{0}", ex.Message), ex.StackTrace, string.Empty, "");
+              
+                return string.Empty;
+            }
+        }
+
+
+        public static void SendCustomerServiceMessage(string content, IEnumerable<string> userList, string accessToken)
+        {
+            foreach (var user in userList)
+            {
+                SendCustomerServiceTextMessage(content, user, accessToken);
+            }
+        }
+
+        public static void SendCustomerServiceNewsMessage(CustomerServicNewsEntity newsEntity , IEnumerable<string> userList, string accessToken)
+        {
+            foreach (var user in userList)
+            {
+                SendCustomerServiceNewsMessage(newsEntity, user, accessToken);
+            }
+        }
+
+        
+
+        public static void SendCustomerServiceMessageAync(string content, IEnumerable<string> userList, string accessToken)
+        {
+            ThreadPool.QueueUserWorkItem(state => SendCustomerServiceMessage(content, userList, accessToken));
+        }
+
+        public static void SendCustomerServiceNewsMessageAync(CustomerServicNewsEntity newsEntity, IEnumerable<string> userList, string accessToken)
+        {
+            ThreadPool.QueueUserWorkItem(state => SendCustomerServiceNewsMessage(newsEntity, userList, accessToken));
+        }
+
+        /// <summary>
+        /// 发送客服消息-文本类型 
+        /// </summary>
+        /// <param name="content">发送文本</param>
+        /// <param name="openId">发送给谁</param>
+        /// <param name="accessToken"></param>
+        /// <returns>Send result ,ok or failed</returns>
+        public static string SendCustomerServiceTextMessage(string content, string openId, string accessToken)
+        {
+            JavaScriptSerializer ser = new JavaScriptSerializer();
+            CustomerServicTextEntity textEntity = new CustomerServicTextEntity();
+            textEntity.msgtype = "text";
+            textEntity.touser = openId;
+            textEntity.text = new CustomerServicText(content);
+            string postContent = ser.Serialize(textEntity);
+
+            return SendCustomerMessage(postContent, accessToken);
+        }
+
+        /// <summary>
+        /// 发送客服消息-图文
+        /// </summary>
+        /// <param name="newsEntity"></param>
+        /// <param name="openId"></param>
+        /// <param name="accessToken"></param>
+        /// <returns></returns>
+        public static string SendCustomerServiceNewsMessage(CustomerServicNewsEntity newsEntity, string openId, string accessToken)
+        {
+            if (!string.IsNullOrEmpty(openId))
+                    newsEntity.touser = openId;
+           
+            JavaScriptSerializer ser = new JavaScriptSerializer();
+            string postContent = ser.Serialize(newsEntity);
+            postContent = postContent.Replace("\\u0026", "&");
+            
+            return SendCustomerMessage(postContent, accessToken);
+        }
+
+        /// <summary>
+        /// 发送客服消息
+        /// </summary>
+        /// <param name="postContent"></param>
+        /// <param name="accessToken"></param>
+        /// <returns></returns>
+        public static string SendCustomerMessage(string postContent, string accessToken)
+        {
+            string sendUrl = string.Format("https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token={0}", accessToken);
+              
+            WebClient client = new WebClient();
+            client.Proxy = HttpHelper.GetProxy();
+            Uri newUri = new Uri(sendUrl);
+            client.Encoding = Encoding.UTF8;
+
+            return client.UploadString(newUri, postContent);
+        }
+
+        /// <summary>
+        /// 获取带参数的永久二维码
+        /// </summary>
+        /// <param name="accessToken"></param>
+        /// <param name="sceneID">自行设定的参数,目前参数只支持1--100000</param>
+        /// <returns>成功返回个性二维码的https链接，失败返回空！</returns>
+        public static string GetSharedBarcode(string accessToken,int sceneID)
+        {
+            string sendUrl = string.Format("https://api.weixin.qq.com/cgi-bin/qrcode/create?access_token={0}", accessToken);
+            WebClient client = new WebClient();
+            client.Proxy = HttpHelper.GetProxy();
+            Uri newUri = new Uri(sendUrl);
+            client.Encoding = Encoding.UTF8;
+
+            string postContent = JsonHelper.String2Json(string.Format("{{\"action_name\": \"QR_LIMIT_SCENE\", \"action_info\": {{\"scene\": {{\"scene_id\": {0}}}}}}}", sceneID));
+            postContent = postContent.Replace("\\","");
+            string ticket = client.UploadString(newUri, postContent);
+
+            if (!string.IsNullOrEmpty(ticket) && ticket.Contains("ticket"))
+            {
+                Dictionary<string,string> result = JsonHelper.JsonDeserialize<Dictionary<string, string>>(ticket);
+                if (result != null && result.ContainsKey("ticket"))
+                    return string.Format("https://mp.weixin.qq.com/cgi-bin/showqrcode?ticket={0}", HttpUtility.UrlEncode(result["ticket"]));
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>
+        /// 上传资源文件,返回资源ID
+        /// </summary>
+        /// <param name="accessToken"></param>
+        /// <param name="mediaType"></param>
+        /// <param name="filePath">文件地址</param>
+        /// <returns>mediaID,资源文件ID</returns>
+        public static string GetUploadMediaID(string accessToken,MediaType mediaType,string filePath)
+        {
+            string sendUrl = string.Format("http://file.api.weixin.qq.com/cgi-bin/media/upload?access_token={0}&type={1}", accessToken,mediaType.ToString());
+            WebClient client = new WebClient();
+            client.Proxy = HttpHelper.GetProxy();
+            Uri newUri = new Uri(sendUrl);
+            client.Encoding = Encoding.UTF8;
+            byte[] serverBack= client.UploadFile(newUri, filePath);
+
+            if (serverBack != null)
+            {
+                string resultStr = Encoding.Default.GetString(serverBack);
+
+                if (!string.IsNullOrEmpty(resultStr))
+                {
+                    return JsonHelper.GetJsonStringValueByKey(resultStr, "media_id");
+                }
+            }
+
+            return string.Empty;
+        }
+
+       
+
+        public static string GetUploadMediaIDCached(string accessToken, MediaType mediaType, string filePath,string cacheKey)
+        {
+            //to do
+            return WebCache.WithCache(() => GetUploadMediaID(accessToken, mediaType, filePath), cacheKey, WebCacheDependencyKeys.DK_UploadMediaID);
+      
+        }
+        /// <summary>
+        /// 处理中文名字后面会有字母的情况.
+        /// </summary>
+        /// <param name="str"></param>
+        /// <returns></returns>
+        public static string CheckString(string str)
+        {
+
+            if (string.IsNullOrEmpty(str))
+            {
+                return str;
+            }
+
+            string regular = "^[\u4e00-\u9fa5]+[A-Za-z]$";
+            Regex reg=new Regex(regular);
+            if (reg.Match(str).Success)
+            {
+                //去除字母
+                str = str.Substring(0, str.Length - 1);
+            }
+            return str;
+
+        }
+        /// <summary>
+        /// 身份证号码验证
+        /// </summary>
+        /// <param name="Id"></param>
+        /// <returns></returns>
+        public static  bool CheckIDCard(string Id)
+        {
+
+            if (Id.Length == 18)
+            {
+
+                bool check = CheckIDCard18(Id);
+
+                return check;
+
+            }
+
+            else if (Id.Length == 15)
+            {
+
+                bool check = CheckIDCard15(Id);
+
+                return check;
+
+            }
+
+            else
+            {
+
+                return false;
+
+            }
+
+        }
+
+
+
+        private static bool CheckIDCard18(string Id)
+        {
+
+            long n = 0;
+
+            if (long.TryParse(Id.Remove(17), out n) == false || n < Math.Pow(10, 16) || long.TryParse(Id.Replace('x', '0').Replace('X', '0'), out n) == false)
+            {
+
+                return false;//数字验证
+
+            }
+
+            string address = "11x22x35x44x53x12x23x36x45x54x13x31x37x46x61x14x32x41x50x62x15x33x42x51x63x21x34x43x52x64x65x71x81x82x91";
+
+            if (address.IndexOf(Id.Remove(2)) == -1)
+            {
+
+                return false;//省份验证
+
+            }
+
+            string birth = Id.Substring(6, 8).Insert(6, "-").Insert(4, "-");
+
+            DateTime time = new DateTime();
+
+            if (DateTime.TryParse(birth, out time) == false)
+            {
+
+                return false;//生日验证
+
+            }
+
+            string[] arrVarifyCode = ("1,0,x,9,8,7,6,5,4,3,2").Split(',');
+
+            string[] Wi = ("7,9,10,5,8,4,2,1,6,3,7,9,10,5,8,4,2").Split(',');
+
+            char[] Ai = Id.Remove(17).ToCharArray();
+
+            int sum = 0;
+
+            for (int i = 0; i < 17; i++)
+            {
+
+                sum += int.Parse(Wi[i]) * int.Parse(Ai[i].ToString());
+
+            }
+
+            int y = -1;
+
+            Math.DivRem(sum, 11, out y);
+
+            if (arrVarifyCode[y] != Id.Substring(17, 1).ToLower())
+            {
+
+                return false;//校验码验证
+
+            }
+
+            return true;//符合GB11643-1999标准
+
+        }
+
+
+
+        private static bool CheckIDCard15(string Id)
+        {
+
+            long n = 0;
+
+            if (long.TryParse(Id, out n) == false || n < Math.Pow(10, 14))
+            {
+
+                return false;//数字验证
+
+            }
+
+            string address = "11x22x35x44x53x12x23x36x45x54x13x31x37x46x61x14x32x41x50x62x15x33x42x51x63x21x34x43x52x64x65x71x81x82x91";
+
+            if (address.IndexOf(Id.Remove(2)) == -1)
+            {
+
+                return false;//省份验证
+
+            }
+
+            string birth = Id.Substring(6, 6).Insert(4, "-").Insert(2, "-");
+
+            DateTime time = new DateTime();
+
+            if (DateTime.TryParse(birth, out time) == false)
+            {
+
+                return false;//生日验证
+
+            }
+
+            return true;//符合15位身份证标准
+
+        }
+
+       
+    }
+}
