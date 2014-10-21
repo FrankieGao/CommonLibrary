@@ -1,0 +1,115 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Text;
+using System.Threading.Tasks;
+using H3C.ProjectFrame.Common;
+using H3C.ProjectFrame.Log;
+
+namespace H3C.WeChat.Common
+{
+    public class HttpHelper
+    {
+        public static IWebProxy GetProxy()
+        {
+            WebProxy proxy = new WebProxy();
+            Uri newUri = new Uri("http://172.25.13.7:8080");
+            // Associate the newUri object to 'myProxy' object so that new myProxy settings can be set.
+            proxy.Address = newUri;
+            // Create a NetworkCredential object and associate it with the 
+            // Proxy property of request object.
+            proxy.Credentials = new NetworkCredential("p04792", "4$tartUp");
+            return proxy;
+        }
+
+        public static string HttpGet(string Url, bool needProxy = true)
+        {
+            try
+            {
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(Url);
+
+                request.Method = "GET";
+                //request.UserAgent = userAgent;
+                //request.Accept = acceptHeader;
+                //request.Headers.Add("Accept-Language", acceptLanguage);
+                request.ContentType = "text/html;charset=UTF-8";
+                if (needProxy)
+                {
+                    request.Proxy = GetProxy();
+                }
+
+                HttpWebResponse response = (HttpWebResponse)request.GetResponse();
+
+                Stream myResponseStream = response.GetResponseStream();
+
+                StreamReader myStreamReader = new StreamReader(myResponseStream,Encoding.UTF8);
+
+                string retString = myStreamReader.ReadToEnd();
+
+                myStreamReader.Close();
+
+                myResponseStream.Close();
+
+                return retString;
+            }
+            catch (Exception ex)
+            {
+                Log4h3c.WriteLog(AppCode.ExperienceCenter.ToString(), "HttpGet",
+                            Consts.LogType.Error, string.Format("ErrorMessage:{0},Url:{1}", ex.Message, Url), ex.StackTrace, string.Empty, "");
+                return string.Empty;
+            }
+
+        }
+
+        public static  string HttpPost(string Url, string postDataStr, bool needProxy = true)
+        {
+
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(Url);
+
+            request.Method = "POST";
+
+            request.ContentType = "application/x-www-form-urlencoded";
+
+            request.ContentLength = Encoding.UTF8.GetByteCount(postDataStr);
+
+            if (needProxy)
+            {
+                request.Proxy = GetProxy();
+            }
+
+            //request.CookieContainer = cookie;
+
+            Stream myRequestStream = request.GetRequestStream();
+
+            StreamWriter myStreamWriter = new StreamWriter(myRequestStream, Encoding.GetEncoding("gb2312"));
+
+            myStreamWriter.Write(postDataStr);
+
+            myStreamWriter.Close();
+
+
+
+            HttpWebResponse response = (HttpWebResponse)request.GetResponse();
+
+
+            //response.Cookies = cookie.GetCookies(response.ResponseUri);
+
+            Stream myResponseStream = response.GetResponseStream();
+
+            StreamReader myStreamReader = new StreamReader(myResponseStream, Encoding.GetEncoding("utf-8"));
+
+            string retString = myStreamReader.ReadToEnd();
+
+            myStreamReader.Close();
+
+            myResponseStream.Close();
+
+
+
+            return retString;
+
+        }
+    }
+}
